@@ -35,8 +35,10 @@
     Small, fast settings for a smoke test (radius 16, 1 iteration).
 
 .PARAMETER Python
-    Interpreter to use. Defaults to the venv outside this repo -- see README.md,
-    'Setup', for why it does not live in the project folder.
+    Interpreter to use. Defaults to .venv in the repository root (README.md,
+    'Setup'); if that does not exist, to a venv outside the repository at
+    %USERPROFILE%\venvs\hipct-structure-tensor, for repositories kept in a
+    synced folder such as OneDrive.
 
 .EXAMPLE
     .\tools\run_all.ps1
@@ -58,7 +60,7 @@ param(
     [int]$Iters  = 3,
     [switch]$SkipI74,
     [switch]$Quick,
-    [string]$Python = "$env:USERPROFILE\venvs\hipct-structure-tensor\Scripts\python.exe"
+    [string]$Python = ""
 )
 
 # Stop on unhandled errors rather than limping onward with bad state.
@@ -70,6 +72,15 @@ $ErrorActionPreference = "Stop"
 # script "works on my machine".
 $Repo = Split-Path -Parent $PSScriptRoot
 Set-Location $Repo
+
+# Default interpreter: the repository's own .venv (the README's setup), else the
+# venv kept outside the repository for synced folders.
+if (-not $Python) {
+    $Python = Join-Path $Repo ".venv\Scripts\python.exe"
+    if (-not (Test-Path $Python)) {
+        $Python = "$env:USERPROFILE\venvs\hipct-structure-tensor\Scripts\python.exe"
+    }
+}
 
 # Force a non-interactive matplotlib backend. Without this a plotting import can
 # try to open a window and block forever when run headless.
@@ -107,9 +118,10 @@ function Invoke-Step {
 # --- preflight -------------------------------------------------------------
 if (-not (Test-Path $Python)) {
     Write-Host "Python not found at: $Python" -ForegroundColor Red
-    Write-Host "Create the venv first (see README.md, Setup):" -ForegroundColor Yellow
-    Write-Host '  python -m venv $env:USERPROFILE\venvs\hipct-structure-tensor'
-    Write-Host '  & "$env:USERPROFILE\venvs\hipct-structure-tensor\Scripts\python.exe" -m pip install -r requirements.txt'
+    Write-Host "Create the environment first (see README.md, Setup):" -ForegroundColor Yellow
+    Write-Host '  python -m venv .venv'
+    Write-Host '  .venv\Scripts\python.exe -m pip install -r requirements.txt'
+    Write-Host 'or pass an existing interpreter with -Python <path to python.exe>.'
     exit 1
 }
 

@@ -1,7 +1,7 @@
 # Runtime dependencies: everything the pipeline imports, derived from the
 # import statements across the tracked .py files (not a `pip freeze` dump).
 #
-#   python -m venv <path outside any synced folder>
+#   python -m venv .venv          (outside the repo if it is in a synced folder)
 #   <venv>/Scripts/python.exe -m pip install -r requirements.txt
 #
 # Tested with Python 3.13.

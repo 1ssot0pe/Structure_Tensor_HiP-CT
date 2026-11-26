@@ -52,12 +52,6 @@ Tomography (HiP-CT) of human brain white matter.
    Find the single (σ, ρ) whose plain structure tensor best reproduces the
    refined field.
 
-Each folder's README explains its scripts and findings.
-[docs/PIPELINE.md](docs/PIPELINE.md) gives the inputs, outputs and decisions of
-every step. Two side studies support the pipeline:
-[`mass_conservation`](mass_conservation/) (crossings from brightness alone) and
-[`noise_model`](noise_model/) (imaging noise from half-reconstructions).
-
 ## Result
 
 <p align="center">
@@ -91,7 +85,7 @@ Full results: [4_optimising_parameters](4_optimising_parameters/README.md).
 
 ## Setup
 
-Requires Python 3.13. From the repository root:
+Tested with Python 3.13 on Windows and Linux. From the repository root:
 
 ```bash
 python -m venv .venv
@@ -99,8 +93,11 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 python -m pip install -r requirements.txt
 ```
 
-Create the environment outside synced folders such as OneDrive; syncing can
-corrupt the install. `requirements-dev.txt` adds notebook and download tools.
+`requirements.txt` pins the versions the results were produced with.
+`requirements-dev.txt` adds optional extras: a notebook kernel, Human Organ
+Atlas download tools and formatters. If the repository is in a synced folder
+(OneDrive, Dropbox), create the environment outside it, because syncing can
+corrupt the install.
 
 ## Usage
 
