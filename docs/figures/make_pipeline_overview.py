@@ -1,17 +1,29 @@
-"""Figure: pipeline overview (README header).
+"""Figure 1: pipeline overview (README).
 
-A schematic of the four stages. Panels Input-2 are computed, not drawn by
-hand: a 2D phantom of two crossing fibre bundles and the orientations a plain
-2D structure tensor finds in it. Panel 3 is a line drawing of the two
-junction types. Panel 4 plots the recorded Stage 4 sweep
-(results/seed_rho_curves.json, 5,000-seed run).
+Five panels, a-e, drawn to journal specifications (190 mm wide, Arial 7 pt,
+bold lowercase panel labels, black text, Wong 2011 colour-blind-safe colours).
 
-Colour has one meaning throughout: blue = one orientation, orange = two.
+What is computed and what is drawn:
+  a  a 2D phantom: two fibre bundles crossing at 85 degrees, with noise.
+  b  the plain 2D structure tensor's two scales, drawn at their true size
+     (disc radius 2*sigma, dashed circle radius 2*rho; sigma = 1, rho = 4 px).
+  c  COMPUTED: the Stage 2 gate, c_s <= FA, applied in 2D to a 21 x 21 px
+     patch at each glyph. Blue = gate keeps one direction (the plain tensor's,
+     also computed). Orange = gate routes the patch to HOST. At routed tissue
+     patches the two orange segments are the phantom's TRUE directions: HOST's
+     peak recovery is a 3D method and is not reproduced in 2D (2D gradients put
+     the order-6 minimum at the bisector), so that part is schematic.
+     Routed background patches carry no direction (HOST labels them
+     disorganised), so nothing is drawn there.
+  d  a line drawing of the two junction types and their brightness ratio S.
+  e  the recorded Stage 4 sweep, results/seed_rho_curves.json (5,000 seeds).
 
-Writes, next to this script:
-    pipeline_overview.png       light theme (README, GitHub light mode)
-    pipeline_overview_dark.png  dark theme  (README, GitHub dark mode)
-    pipeline_overview.pdf       light theme, vector
+Why 85 degrees: in 2D, two gradient families theta apart give
+c_s ~ 1 - cos(theta), so at ~60 degrees c_s ~ FA and the 2D gate cannot
+separate them. In 3D the gate separates the certified 40-degree phantom
+(c_s 0.81 vs FA 0.18, 1_sigma_rho_selection/gate_scales.json).
+
+Writes pipeline_overview.png (600 dpi) and pipeline_overview.pdf.
 
     python docs/figures/make_pipeline_overview.py
 """
@@ -25,7 +37,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt                          # noqa: E402
 from matplotlib.lines import Line2D                      # noqa: E402
-from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch  # noqa: E402
+from matplotlib.patches import Circle, FancyArrowPatch   # noqa: E402
 from scipy.ndimage import gaussian_filter                # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -33,246 +45,222 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 DATA = os.path.join(ROOT, "results", "seed_rho_curves.json")
 OUT = os.path.join(HERE, "pipeline_overview")
 
-# Blue/orange pair validated for contrast and colour-vision deficiency
-# (dataviz palette validator, both themes). Surfaces match GitHub's pages.
-THEMES = {
-    "light": dict(bg="#ffffff", ink="#0b0b0b", ink2="#52514e", muted="#898781",
-                  box="#c3c2b7", one="#2a78d6", two="#eb6834",
-                  mark="#ffffff"),
-    "dark": dict(bg="#0d1117", ink="#f0efec", ink2="#c3c2b7", muted="#8b8a84",
-                 box="#3d444d", one="#3987e5", two="#d95926",
-                 mark="#f0efec"),
-}
+# Wong (2011), Nature Methods 8:441 -- colour-blind-safe.
+BLUE, ORANGE = "#0072B2", "#D55E00"
+INK, GREY = "#000000", "#808080"
 
-FW, FH = 13.0, 3.5           # figure size (inches)
-N = 128                      # phantom size (pixels)
-ANG_A, ANG_B = 20.0, -45.0   # bundle directions (degrees from +x)
+MM = 1 / 25.4
+FW, FH = 190 * MM, 47 * MM          # double-column width
+
+N = 160                              # phantom size (px)
+ANG_A, ANG_B = 20.0, -65.0           # bundle directions, 85 degrees apart
+SPACING, RADIUS, NOISE = 8.0, 1.5, 0.2
+SIGMA, RHO = 1.0, 4.0                # plain tensor scales (px), panels b-c
+GATE_HALF = 10                       # 21 x 21 px gate patch
+EPS = 1e-12
 
 
 # --------------------------------------------------------------------------
-# Phantom and structure tensor (2D, for illustration only)
+# Phantom, plain tensor, and the Stage 2 gate in 2D
 # --------------------------------------------------------------------------
-def bundle(yy, xx, ang_deg, offset, width=34.0, spacing=5.0, radius=1.2):
+def bundle(yy, xx, ang_deg, offset, width=44.0):
     a = np.deg2rad(ang_deg)
     n = np.array([-np.sin(a), np.cos(a)])
     u = (xx - N / 2) * n[0] + (yy - N / 2) * n[1] - offset
-    d = (u + spacing / 2) % spacing - spacing / 2
-    fibres = np.exp(-d ** 2 / (2 * radius ** 2))
-    band = 1 / (1 + np.exp((np.abs(u) - width / 2) / 1.5))
-    return fibres * band, band
+    d = (u + SPACING / 2) % SPACING - SPACING / 2
+    edge = 1 / (1 + np.exp((np.abs(u) - width / 2) / 1.5))
+    return np.exp(-d ** 2 / (2 * RADIUS ** 2)) * edge, np.abs(u) < width / 2
 
 
 def phantom():
     yy, xx = np.mgrid[0:N, 0:N].astype(float)
-    a, band_a = bundle(yy, xx, ANG_A, offset=-6)
-    b, band_b = bundle(yy, xx, ANG_B, offset=8)
+    a, in_a = bundle(yy, xx, ANG_A, -8)
+    b, in_b = bundle(yy, xx, ANG_B, 10)
     rng = np.random.default_rng(0)
-    img = a + b + 0.12 + 0.18 * rng.standard_normal((N, N))
-    return gaussian_filter(img, 0.6), band_a, band_b
+    img = a + b + 0.1 + NOISE * rng.standard_normal((N, N))
+    return img, in_a | in_b
 
 
-def fibre_angle(img, sigma=1.0, rho=4.0):
-    """Angle of the 2D structure tensor's smaller-eigenvalue eigenvector."""
-    gy = gaussian_filter(img, sigma, order=(1, 0))
-    gx = gaussian_filter(img, sigma, order=(0, 1))
-    jxx = gaussian_filter(gx * gx, rho)
-    jxy = gaussian_filter(gx * gy, rho)
-    jyy = gaussian_filter(gy * gy, rho)
+def plain_tensor_angle(img):
+    """Fibre angle = smaller-eigenvalue eigenvector of the 2D structure tensor."""
+    gy = gaussian_filter(img, SIGMA, order=(1, 0))
+    gx = gaussian_filter(img, SIGMA, order=(0, 1))
+    jxx = gaussian_filter(gx * gx, RHO)
+    jxy = gaussian_filter(gx * gy, RHO)
+    jyy = gaussian_filter(gy * gy, RHO)
     return 0.5 * np.arctan2(2 * jxy, jxx - jyy) + np.pi / 2
 
 
+def gate_routes(patch, mag_frac=0.1):
+    """2D form of core.host_fod: route to HOST when c_s > FA."""
+    gy = gaussian_filter(patch, SIGMA, order=(1, 0), mode="nearest")
+    gx = gaussian_filter(patch, SIGMA, order=(0, 1), mode="nearest")
+    G = np.stack([gx.ravel(), gy.ravel()], 1)
+    m = np.linalg.norm(G, axis=1)
+    G = G[m > mag_frac * (m.max() + EPS)]
+    lam = np.sort(np.linalg.eigvalsh(G.T @ G))
+    c_s = 2 * lam[0] / (lam.sum() + EPS)
+    fa = abs(lam[1] - lam[0]) / (np.sqrt((lam ** 2).sum()) + EPS)
+    return c_s > fa
+
+
 # --------------------------------------------------------------------------
-# Drawing helpers
+# Layout helpers (all positions in inches)
 # --------------------------------------------------------------------------
-def panel_box(fig, t, x0, x1, y0, y1, header, title):
-    fig.add_artist(FancyBboxPatch(
-        (x0, y0), x1 - x0, y1 - y0, transform=fig.transFigure,
-        boxstyle="round,pad=0,rounding_size=0.012", fc="none",
-        ec=t["box"], lw=1.1))
-    fig.text(x0 + 0.010, y1, f" {header} ", fontsize=10, color=t["ink"],
-             va="center", ha="left", backgroundcolor=t["bg"])
-    fig.text((x0 + x1) / 2, y0 - 0.085, title, fontsize=12.5,
-             fontweight="bold", color=t["ink"], ha="center", va="center")
+def rect(x, y, w, h):
+    return [x / FW, y / FH, w / FW, h / FH]
 
 
-def note(fig, t, x0, x1, y, s):
-    fig.text((x0 + x1) / 2, y, s, fontsize=8.5, color=t["ink2"],
-             ha="center", va="center")
+def text(fig, x, y, s, **kw):
+    kw.setdefault("fontsize", 7)
+    kw.setdefault("color", INK)
+    fig.text(x / FW, y / FH, s, **kw)
 
 
-def arrow(fig, t, x0, x1, y):
-    fig.add_artist(FancyArrowPatch(
-        (x0, y), (x1, y), transform=fig.transFigure, arrowstyle="-|>",
-        mutation_scale=14, lw=1.4, color=t["ink2"]))
-
-
-def image_axes(fig, rect, img, t, alpha=1.0):
-    ax = fig.add_axes(rect)
-    ax.imshow(img, cmap="gray", vmin=0.0, vmax=1.6, origin="lower",
+def image_axes(fig, x, y, s, img, alpha=1.0):
+    ax = fig.add_axes(rect(x, y, s, s))
+    ax.imshow(img, cmap="gray", vmin=0, vmax=1.6, origin="lower",
               interpolation="bilinear", alpha=alpha)
-    ax.set_facecolor("#000000")
+    ax.set_facecolor("black")
     ax.set_xticks([])
     ax.set_yticks([])
-    for s in ax.spines.values():
-        s.set_color(t["box"])
-        s.set_linewidth(0.8)
+    ax.set_xlim(-0.5, N - 0.5)
+    ax.set_ylim(-0.5, N - 0.5)
+    for sp in ax.spines.values():
+        sp.set_linewidth(0.5)
     return ax
 
 
-def glyph(ax, x, y, ang, length, color, lw=2.2):
+def segment(ax, x, y, ang, length, color, lw=1.1):
     # orientations are directors (v == -v): segments, never arrows
     dx, dy = 0.5 * length * np.cos(ang), 0.5 * length * np.sin(ang)
     ax.plot([x - dx, x + dx], [y - dy, y + dy], color=color, lw=lw,
             solid_capstyle="round")
 
 
-def side_key(fig, t, tx, y, swatch, label):
-    """A label to the right of an image: swatch (callable) then text."""
-    swatch(tx, y)
-    fig.text(tx + 0.016, y, label, fontsize=8, color=t["ink2"], va="center",
-             linespacing=1.1)
+def key_line(fig, x, y, color, label):
+    fig.add_artist(Line2D([x / FW, (x + 0.14) / FW], [y / FH, y / FH],
+                          color=color, lw=1.2, solid_capstyle="round"))
+    text(fig, x + 0.19, y, label, va="center")
+
+
+def arrow(fig, x0, x1, y):
+    fig.add_artist(FancyArrowPatch((x0 / FW, y / FH), (x1 / FW, y / FH),
+                                   transform=fig.transFigure,
+                                   arrowstyle="-|>", mutation_scale=7,
+                                   lw=0.8, color=GREY))
 
 
 # --------------------------------------------------------------------------
-def draw(theme):
-    t = THEMES[theme]
+def main():
     plt.rcParams.update({
         "font.family": "sans-serif",
-        "font.sans-serif": ["Segoe UI", "Helvetica", "Arial", "DejaVu Sans"],
-        "mathtext.fontset": "stix",
-        "figure.facecolor": t["bg"], "savefig.facecolor": t["bg"],
-        "axes.facecolor": t["bg"], "pdf.fonttype": 42,
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "mathtext.fontset": "custom", "mathtext.rm": "Arial",
+        "mathtext.it": "Arial:italic", "mathtext.bf": "Arial:bold",
+        "font.size": 7, "axes.linewidth": 0.5,
+        "xtick.major.width": 0.5, "ytick.major.width": 0.5,
+        "xtick.major.size": 2, "ytick.major.size": 2,
+        "xtick.labelsize": 6, "ytick.labelsize": 6,
+        "pdf.fonttype": 42, "savefig.facecolor": "white",
     })
-    img, band_a, band_b = phantom()
-    theta = fibre_angle(img)
+    img, tissue = phantom()
+    theta = plain_tensor_angle(img)
 
     fig = plt.figure(figsize=(FW, FH))
-    Y0, Y1 = 0.20, 0.93
-    xs = [(0.008, 0.160), (0.186, 0.394), (0.420, 0.632), (0.658, 0.832),
-          (0.858, 0.992)]
-    heads = ["Input", "How wide to measure?", "Is one direction enough?",
-             "Crossing or touching?", "Best single scale?"]
-    titles = ["HiP-CT volume", "1. Scale selection", "2. Crossing gate",
-              "3. Tractography", "4. Optimisation"]
-    for (x0, x1), h, ti in zip(xs, heads, titles):
-        panel_box(fig, t, x0, x1, Y0, Y1, h, ti)
-    for (_, a), (b, _) in zip(xs[:-1], xs[1:]):
-        arrow(fig, t, a + 0.003, b - 0.003, (Y0 + Y1) / 2)
+    S = 1.12                              # panel square size (in)
+    x0s = [0.10 + k * 1.50 for k in range(5)]
+    YB, YT = 0.40, 0.40 + S               # image bottom / top
+    titles = ["HiP-CT volume", "Stage 1: scale", "Stage 2: crossing gate",
+              "Stage 3: tractography", "Stage 4: optimisation"]
+    for k, (x, ti) in enumerate(zip(x0s, titles)):
+        text(fig, x - 0.04, YT + 0.13, "abcde"[k], fontsize=8,
+             fontweight="bold", va="bottom")
+        text(fig, x + 0.10, YT + 0.13, ti, va="bottom")
+    for x in x0s[:-1]:
+        arrow(fig, x + S + 0.07, x + 1.50 - 0.07, YB + S / 2)
 
-    side = 0.50                       # image height, figure units
-    w = side / (FW / FH)              # matching width -> square image
-    yi = Y0 + 0.095                   # image bottom
-    ynote = Y0 + 0.048
-    y_hi, y_lo = yi + 0.40, yi + 0.13  # rows for the side keys
+    # a ---------------------------------------------------------------
+    image_axes(fig, x0s[0], YB, S, img)
+    text(fig, x0s[0], YB - 0.13, "3D image; 2D phantom shown", va="center")
 
-    # ---- Input -----------------------------------------------------------
-    x0, x1 = xs[0]
-    image_axes(fig, [(x0 + x1) / 2 - w / 2, yi, w, side], img, t)
-    note(fig, t, x0, x1, ynote, "3D greyscale, µm voxels")
+    # b ---------------------------------------------------------------
+    ax = image_axes(fig, x0s[1], YB, S, img)
+    c = (N / 2 + 12, N / 2 + 30)
+    ax.add_patch(Circle(c, 2 * RHO, fc="none", ec="white", lw=0.8,
+                        ls=(0, (2, 1.5))))
+    ax.add_patch(Circle(c, 2 * SIGMA, fc="white", ec="none"))
+    text(fig, x0s[1], YB - 0.13, r"disc: $\sigma$ (derivative)",
+         va="center")
+    text(fig, x0s[1], YB - 0.27, r"circle: $\rho$ (integration)",
+         va="center")
 
-    # ---- 1. Scale selection ---------------------------------------------
-    x0, x1 = xs[1]
-    ax = image_axes(fig, [x0 + 0.010, yi, w, side], img, t)
-    ax.add_patch(Circle((64, 64), 16, fc="none", ec=t["mark"], lw=1.6,
-                        ls=(0, (3, 2))))
-    ax.add_patch(Circle((64, 64), 3, fc=t["mark"], ec="none"))
-    tx = x0 + 0.010 + w + 0.010
-    side_key(fig, t, tx, y_hi,
-             lambda x, y: fig.text(x, y, r"$\sigma$", fontsize=14,
-                                   color=t["ink"], va="center"),
-             "derivative\nscale")
-    side_key(fig, t, tx, y_lo,
-             lambda x, y: fig.text(x, y, r"$\rho$", fontsize=14,
-                                   color=t["ink"], va="center"),
-             "averaging\nwindow")
-    note(fig, t, x0, x1, ynote, "set from the data, per 32³ block")
+    # c ---------------------------------------------------------------
+    ax = image_axes(fig, x0s[2], YB, S, img, alpha=0.4)
+    step, h = 12, GATE_HALF
+    for y in range(h + 4, N - h, step):
+        for x in range(h + 4, N - h, step):
+            routed = gate_routes(img[y - h:y + h + 1, x - h:x + h + 1])
+            if not tissue[y, x]:
+                continue                  # background: no direction
+            if routed:
+                segment(ax, x, y, np.deg2rad(ANG_A), 9, ORANGE)
+                segment(ax, x, y, np.deg2rad(ANG_B), 9, ORANGE)
+            else:
+                segment(ax, x, y, theta[y, x], 10, BLUE)
+    key_line(fig, x0s[2], YB - 0.13, BLUE, "one direction (tensor)")
+    key_line(fig, x0s[2], YB - 0.27, ORANGE, "routed to HOST")
 
-    # ---- 2. Crossing gate ----------------------------------------------
-    x0, x1 = xs[2]
-    ax = image_axes(fig, [x0 + 0.010, yi, w, side], img, t, alpha=0.35)
-    step = 11
-    for y in range(step // 2 + 2, N - 2, step):
-        for x in range(step // 2 + 2, N - 2, step):
-            ina, inb = band_a[y, x] > 0.5, band_b[y, x] > 0.5
-            if ina and inb:      # routed to the higher-order tensor
-                glyph(ax, x, y, np.deg2rad(ANG_A), 8.0, t["two"])
-                glyph(ax, x, y, np.deg2rad(ANG_B), 8.0, t["two"])
-            elif ina or inb:     # plain structure tensor
-                glyph(ax, x, y, theta[y, x], 8.5, t["one"])
-    ax.set_xlim(0, N)
-    ax.set_ylim(0, N)
-    tx = x0 + 0.010 + w + 0.010
-
-    def line_swatch(col):
-        return lambda x, y: fig.add_artist(Line2D(
-            [x, x + 0.010], [y, y], transform=fig.transFigure, color=col,
-            lw=2.4, solid_capstyle="round"))
-    side_key(fig, t, tx, y_hi, line_swatch(t["one"]), "one\ndirection")
-    side_key(fig, t, tx, y_lo, line_swatch(t["two"]), "two\ndirections")
-    note(fig, t, x0, x1, ynote, r"HOST only where $c_s$ > FA")
-
-    # ---- 3. Tractography ----------------------------------------------
-    x0, x1 = xs[3]
-    pw = (x1 - x0 - 0.030) / 2
+    # d ---------------------------------------------------------------
     s = np.linspace(-1.1, 1.1, 60)
-    for k, kind in enumerate(("cross", "touch")):
-        ax = fig.add_axes([x0 + 0.010 + k * (pw + 0.010), yi + 0.03, pw,
-                           side - 0.03])
+    w = (S - 0.08) / 2
+    for k, kind in enumerate(("crossing", "touching")):
+        ax = fig.add_axes(rect(x0s[3] + k * (w + 0.08), YB + 0.10, w, S - 0.2))
         ax.set_xlim(-1.25, 1.25)
-        ax.set_ylim(-1.45, 1.35)
+        ax.set_ylim(-1.6, 1.6)
         ax.axis("off")
-        if kind == "cross":
-            ax.plot(s, 0.55 * s, color=t["ink2"], lw=2.2)
-            ax.plot(s, -0.55 * s, color=t["ink2"], lw=2.2)
-            lab, sval, ring = "crossing", r"$S \approx 1$", t["two"]
+        if kind == "crossing":
+            ax.plot(s, 0.6 * s, color=GREY, lw=1.2)
+            ax.plot(s, -0.6 * s, color=GREY, lw=1.2)
+            ring, label = ORANGE, r"$S \approx 1$"
         else:
-            ax.plot(s, 0.13 + 0.45 * s ** 2, color=t["ink2"], lw=2.2)
-            ax.plot(s, -0.13 - 0.45 * s ** 2, color=t["ink2"], lw=2.2)
-            lab, sval, ring = "touching", r"$S \approx 0.5$", t["one"]
-        ax.plot(0, 0, "o", ms=12, mfc="none", mec=ring, mew=2.4)
-        ax.text(0, -1.0, lab, ha="center", va="top", fontsize=9,
-                color=t["ink"])
-        ax.text(0, 1.05, sval, ha="center", va="bottom", fontsize=11,
-                color=t["ink"])
-    note(fig, t, x0, x1, ynote, "brightness test + global tracking")
+            ax.plot(s, 0.14 + 0.5 * s ** 2, color=GREY, lw=1.2)
+            ax.plot(s, -0.14 - 0.5 * s ** 2, color=GREY, lw=1.2)
+            ring, label = BLUE, r"$S \approx 0.5$"
+        ax.plot(0, 0, "o", ms=6, mfc="none", mec=ring, mew=1.2)
+        ax.text(0, -1.25, kind, ha="center", va="top", fontsize=7)
+        ax.text(0, 1.3, label, ha="center", va="bottom", fontsize=7)
+    text(fig, x0s[3], YB - 0.13, r"$S$: junction brightness ratio",
+         va="center")
+    text(fig, x0s[3], YB - 0.27, r"kept as crossing if $S$ > 0.75",
+         va="center")
 
-    # ---- 4. Optimisation -----------------------------------------------
-    x0, x1 = xs[4]
+    # e ---------------------------------------------------------------
     with open(DATA) as f:
         d = json.load(f)
     rhos = np.array(d["rhos"])
     err = np.array(d["res"]["5000"]["median"])
     j = int(np.argmin(err))
-    ax = fig.add_axes([x0 + 0.022, yi + 0.06, x1 - x0 - 0.034, side - 0.08])
-    ax.plot(rhos, err, color=t["one"], lw=2)
-    ax.plot(rhos[j], err[j], "o", ms=8, mfc=t["one"], mec=t["bg"], mew=1.2)
-    ax.annotate(rf"$\rho^* = {rhos[j]:.2f}$", (rhos[j], err[j]),
-                xytext=(0, -9), textcoords="offset points", ha="center",
-                va="top", fontsize=11, color=t["ink"])
-    ax.set_xscale("log")
-    ax.set_xticks([])
-    ax.set_yticks([])
+    ax = fig.add_axes(rect(x0s[4] + 0.30, YB + 0.06, S - 0.32, S - 0.06))
+    ax.plot(rhos, err, color=BLUE, lw=1.0)
+    ax.plot(rhos[j], err[j], "o", ms=3.5, color=BLUE)
+    ax.annotate(r"$\rho$* = " + f"{rhos[j]:.2f}", (rhos[j], err[j]),
+                xytext=(0, -5), textcoords="offset points", ha="center",
+                va="top", fontsize=6.5)
+    ax.set_xscale("log", base=2)
+    ax.set_xticks([1, 2, 4, 8])
+    ax.set_xticklabels(["1", "2", "4", "8"])
     ax.minorticks_off()
+    ax.set_ylim(0, 45)
+    ax.set_yticks([0, 20, 40])
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
-    for sp in ("left", "bottom"):
-        ax.spines[sp].set_color(t["muted"])
-    ax.set_xlabel(r"$\rho$", fontsize=12, color=t["ink2"], labelpad=1)
-    ax.set_ylabel("angular error", fontsize=8, color=t["ink2"], labelpad=3)
-    ax.set_ylim(err.min() - 11, err.max() + 2)
-    note(fig, t, x0, x1, ynote, "one (σ, ρ) per chunk")
-    return fig
+    ax.set_xlabel(r"$\rho$ (voxels)", fontsize=7, labelpad=1)
+    ax.set_ylabel("Error (°)", fontsize=7, labelpad=1)
 
-
-def main():
-    for theme in ("light", "dark"):
-        fig = draw(theme)
-        suffix = "" if theme == "light" else "_dark"
-        fig.savefig(f"{OUT}{suffix}.png", dpi=250)
-        if theme == "light":
-            fig.savefig(f"{OUT}.pdf")
-        plt.close(fig)
-    print(f"wrote {OUT}.png, {OUT}_dark.png and {OUT}.pdf")
+    fig.savefig(f"{OUT}.png", dpi=600)
+    fig.savefig(f"{OUT}.pdf")
+    print(f"wrote {OUT}.png and {OUT}.pdf")
 
 
 if __name__ == "__main__":
