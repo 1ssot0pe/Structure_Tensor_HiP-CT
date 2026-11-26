@@ -101,27 +101,27 @@ corrupt the install.
 
 ## Usage
 
-Checks with a known answer. They need no data, and CI runs them on every push:
+Test the installation. These checks have known answers and need no data:
 
 ```bash
 python 3_global_tractography/test_frame_convention.py
 python 3_global_tractography/run_pipeline.py --radius 16 --iters 1
 ```
 
-The full pipeline on real data (Stages 1–3, the Stage 3 optimisation loop,
-then Stage 4):
+Reproduce Figure 2 (needs the i74 volume, see [Data](#data)). Stage 3 writes
+the refined field; the ρ sweep then compares the result with the recorded one
+and exits with an error if they differ:
 
 ```bash
-python 3_global_tractography/run_pipeline.py --i74
 python 3_global_tractography/descent_loop.py --radius 24 --seeds 5000 \
     --turn relax --refine-field --variant vec1 --outdir results/seed_5000
-python 4_optimising_parameters/sigma_rho_match.py --run results/seed_5000
+python 4_optimising_parameters/rho_sweep.py --runs results/seed_5000 \
+    --labels 5000 --out results/rerun.json --check results/seed_rho_curves.json
 ```
 
-On Windows, `.\tools\run_all.ps1 -Quick -SkipI74` runs the checks as a
-one-minute smoke test. Outputs go to `results/`. The full outputs of the
-recorded runs are attached to the
-[release](https://github.com/1ssot0pe/HiP-CT_Structure_Tensor/releases).
+To skip Stage 3, unzip the
+[v1.0.0 release](https://github.com/1ssot0pe/HiP-CT_Structure_Tensor/releases)
+archive at the repository root; it holds all five recorded runs.
 
 ## Data
 
@@ -129,7 +129,8 @@ The real-data steps use the i74 brain volume (20 µm voxels) from the
 [Human Organ Atlas](https://human-organ-atlas.esrf.fr/). It is not
 redistributed here. The noise study uses two half-reconstructions of the
 LADAF-2022-13 left lung (16.547 µm voxels), set with `LUNG_HALF_A_DIR` and
-`LUNG_HALF_B_DIR`. Everything else runs on synthetic phantoms.
+`LUNG_HALF_B_DIR`. Everything else runs on synthetic phantoms. If you use
+Human Organ Atlas data, cite the datasets as the Atlas asks.
 
 ### Using any dataset
 
@@ -177,14 +178,6 @@ notebooks/                 early exploration
   url       = {https://doi.org/10.5281/zenodo.24289711}
 }
 ```
-
-Hezhao, I. and Keenlyside, A. (2026). *Optimising the Structure Tensor Analysis
-of White Matter Fibres in Synchrotron Tomography*. Zenodo.
-https://doi.org/10.5281/zenodo.24289711
-
-The DOI always points to the latest release; v1.0.0 is
-[10.5281/zenodo.24289712](https://doi.org/10.5281/zenodo.24289712). If you use
-Human Organ Atlas data, also cite the datasets as the Atlas asks.
 
 ## Acknowledgements
 
