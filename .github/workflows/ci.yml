@@ -1,6 +1,6 @@
 name: CI
 
-# The same known-answer and known-truth checks as `run_all.ps1 -Quick -SkipI74`,
+# The same known-answer and known-truth checks as `tools/run_all.ps1 -Quick -SkipI74`,
 # on Linux. No real data is needed: both steps run on synthetic phantoms.
 
 on:

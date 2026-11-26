@@ -8,8 +8,8 @@ Setup (environment, data location) is in the [main README](../README.md#setup).
 All commands run from the repository root.
 
 ```powershell
-.\run_all.ps1                  # all three checks, stops at the first failure
-.\run_all.ps1 -Quick -SkipI74  # ~1 min smoke test, no real data needed
+.\tools\run_all.ps1                  # all three checks, stops at the first failure
+.\tools\run_all.ps1 -Quick -SkipI74  # ~1 min smoke test, no real data needed
 ```
 
 Or run the steps yourself, in this order — each is more trustworthy than the

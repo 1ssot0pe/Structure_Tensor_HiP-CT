@@ -39,15 +39,15 @@
     'Setup', for why it does not live in the project folder.
 
 .EXAMPLE
-    .\run_all.ps1
+    .\tools\run_all.ps1
     Full run with defaults.
 
 .EXAMPLE
-    .\run_all.ps1 -Quick -SkipI74
+    .\tools\run_all.ps1 -Quick -SkipI74
     Fast check that nothing is broken. About a minute.
 
 .EXAMPLE
-    .\run_all.ps1 -Radius 48 -Iters 5
+    .\tools\run_all.ps1 -Radius 48 -Iters 5
     A larger, slower run on real data.
 #>
 
@@ -64,10 +64,11 @@ param(
 # Stop on unhandled errors rather than limping onward with bad state.
 $ErrorActionPreference = "Stop"
 
-# $PSScriptRoot is the folder holding THIS file, so the script works no matter
-# which directory you run it from. Resolving paths against the current directory
-# instead is the classic way a script "works on my machine".
-$Repo = $PSScriptRoot
+# $PSScriptRoot is the folder holding THIS file (tools/), and the repository root
+# is its parent, so the script works no matter which directory you run it from.
+# Resolving paths against the current directory instead is the classic way a
+# script "works on my machine".
+$Repo = Split-Path -Parent $PSScriptRoot
 Set-Location $Repo
 
 # Force a non-interactive matplotlib backend. Without this a plotting import can
